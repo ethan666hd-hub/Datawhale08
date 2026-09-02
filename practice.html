@@ -24,14 +24,14 @@
             <span class="favorite-icon" aria-hidden="true">☆</span>
             <span class="favorite-label">收藏</span>
           </button>
-          <a class="back-link back-link-button" href="index.html"><span aria-hidden="true">←</span> 选它有说法</a>
+          <a class="back-link back-link-button" href="index.html" data-track="challenge_intro_click"><span aria-hidden="true">←</span> 选它有说法</a>
         </div>
       </div>
       <div class="reading-progress" aria-hidden="true"><span></span></div>
     </header>
 
     <main id="main-content">
-      <section class="guide-section page-shell" aria-labelledby="guide-title">
+      <section class="guide-section page-shell" aria-labelledby="guide-title" data-analytics-section="tool_guide">
         <div class="guide-heading reveal">
           <h1 id="guide-title">AI工具选用推荐指南</h1>
           <img
@@ -163,7 +163,7 @@
 
       </section>
 
-      <section class="feedback-section page-shell" aria-labelledby="feedback-title">
+      <section class="feedback-section page-shell" aria-labelledby="feedback-title" data-analytics-section="feedback_section">
         <div class="feedback-heading reveal">
           <h2 id="feedback-title">这次实践进行得怎么样？</h2>
           <p>无论有没有找到顺手的工具，都可以留下一条结果或卡点，给自己也给下一位同学参考。</p>
@@ -187,7 +187,7 @@
           </button>
         </div>
 
-        <form class="feedback-form" hidden novalidate>
+        <form class="feedback-form" hidden novalidate data-analytics-section="feedback_detail_form">
           <label for="feedback-message">愿意的话，分享一条这次发现的工具或新判断</label>
           <div class="feedback-composer">
             <textarea id="feedback-message" name="message" maxlength="500" placeholder="像发消息一样，随手说一句这次最有用的发现；也可以直接发一张图。"></textarea>
