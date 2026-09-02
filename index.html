@@ -19,13 +19,13 @@
           <span class="brand-mark"><img src="assets/datawhale.svg" alt="" /></span>
           <span class="brand-title">DATAWHALE<small>每日一试</small></span>
         </a>
-        <a class="nav-button header-cta" href="practice.html">今日实践 <span aria-hidden="true">↗</span></a>
+        <a class="nav-button header-cta" href="practice.html" data-track="challenge_click">今日实践 <span aria-hidden="true">↗</span></a>
       </div>
       <div class="reading-progress" aria-hidden="true"><span></span></div>
     </header>
 
     <main id="main-content">
-      <section class="hero page-shell" aria-labelledby="hero-title">
+      <section class="hero page-shell" aria-labelledby="hero-title" data-analytics-section="hero">
         <div class="hero-copy reveal">
           <p class="volume"><strong>VOL. 026</strong></p>
           <h1 id="hero-title">AI装备<br /><mark>清单推荐</mark></h1>
@@ -41,18 +41,18 @@
             <strong>按任务选</strong>
           </div>
           <div class="tool-index-grid">
-            <a href="#assistants"><span>01</span><strong>通用助手</strong><small>豆包 / ChatGPT / Claude / DeepSeek</small></a>
-            <a href="#office"><span>02</span><strong>办公文档</strong><small>豆包工作 / 飞书 / Notion</small></a>
-            <a href="#research"><span>03</span><strong>搜索研究</strong><small>秘塔 / Kimi K3</small></a>
-            <a href="#visual"><span>04</span><strong>图片视频</strong><small>即梦 / Seedance / MiniMax</small></a>
-            <a href="#build"><span>05</span><strong>Agent 与编程</strong><small>扣子 / Cursor / Codex</small></a>
-            <a href="#principles"><span>06</span><strong>选择心法</strong><small>任务 / 表达 / 交付</small></a>
+            <a href="#assistants" data-track="scene_nav_click"><span>01</span><strong>通用助手</strong><small>豆包 / ChatGPT / Claude / DeepSeek</small></a>
+            <a href="#office" data-track="scene_nav_click"><span>02</span><strong>办公文档</strong><small>豆包工作 / 飞书 / Notion</small></a>
+            <a href="#research" data-track="scene_nav_click"><span>03</span><strong>搜索研究</strong><small>秘塔 / Kimi K3</small></a>
+            <a href="#visual" data-track="scene_nav_click"><span>04</span><strong>图片视频</strong><small>即梦 / Seedance / MiniMax</small></a>
+            <a href="#build" data-track="scene_nav_click"><span>05</span><strong>Agent 与编程</strong><small>扣子 / Cursor / Codex</small></a>
+            <a href="#principles" data-track="scene_nav_click"><span>06</span><strong>选择心法</strong><small>任务 / 表达 / 交付</small></a>
           </div>
           <div class="tool-index-footer"><span>同场景平行推荐</span><strong>2026.08</strong></div>
         </nav>
       </section>
 
-      <section class="scene-band page-shell" id="assistants" aria-labelledby="assistants-title">
+      <section class="scene-band page-shell" id="assistants" aria-labelledby="assistants-title" data-analytics-section="assistants">
         <div class="scene-heading reveal">
           <p>日常对话与通用助手</p>
           <h2 id="assistants-title">豆包 / ChatGPT / Claude / DeepSeek</h2>
@@ -82,7 +82,7 @@
         </aside>
       </section>
 
-      <section class="office-band" id="office" aria-labelledby="office-title">
+      <section class="office-band" id="office" aria-labelledby="office-title" data-analytics-section="office">
         <div class="page-shell office-layout">
           <div class="office-copy reveal">
             <h2 id="office-title">办公与文档</h2>
@@ -106,7 +106,7 @@
         </div>
       </section>
 
-      <section class="research-band page-shell" id="research" aria-labelledby="research-title">
+      <section class="research-band page-shell" id="research" aria-labelledby="research-title" data-analytics-section="research">
         <div class="research-title reveal">
           <h2 id="research-title">搜索与研究</h2>
         </div>
@@ -136,7 +136,7 @@
         </div>
       </section>
 
-      <section class="creative-band" id="visual" aria-labelledby="creative-title">
+      <section class="creative-band" id="visual" aria-labelledby="creative-title" data-analytics-section="visual">
         <div class="page-shell">
           <div class="creative-heading reveal">
             <h2 id="creative-title">图片、视频与设计交付</h2>
@@ -172,7 +172,7 @@
         </div>
       </section>
 
-      <section class="build-band page-shell" id="build" aria-labelledby="build-title">
+      <section class="build-band page-shell" id="build" aria-labelledby="build-title" data-analytics-section="build">
         <div class="build-heading reveal">
           <h2 id="build-title">工作台、Agent 与编程</h2>
         </div>
@@ -201,7 +201,7 @@
         </div>
       </section>
 
-      <section class="closing-band" id="principles">
+      <section class="closing-band" id="principles" data-analytics-section="principles">
         <div class="page-shell closing-layout reveal">
           <div>
             <h2>工具选择的心法</h2>
@@ -214,7 +214,7 @@
         </div>
       </section>
 
-      <section class="final-cta page-shell reveal">
+      <section class="final-cta page-shell reveal" data-analytics-section="final_cta">
         <h2>你找工具的时候，就可以看这一张表</h2>
         <a class="button button-dark" href="practice.html" data-track="challenge_click">打开工具清单 <span aria-hidden="true">↗</span></a>
       </section>
