@@ -1,6 +1,17 @@
 const ANALYTICS_KEY = "datawhale_daily_v6_events";
 const FEEDBACK_KEY = "datawhale_daily_v6_feedback";
 const FAVORITE_KEY = "datawhale_daily_v6_favorite";
+const VISITOR_ID_KEY = "datawhale_daily_v6_anonymous_id";
+const SESSION_ID_KEY = "datawhale_daily_v6_session_id";
+const ATTRIBUTION_KEY = "datawhale_daily_v6_attribution";
+const LAST_VISIT_KEY = "datawhale_daily_v6_last_visit";
+const RETURN_VISIT_SESSION_KEY = "datawhale_daily_v6_return_visit_recorded";
+const CHALLENGE_ID = "ai-tool-guide-2026-09-02";
+const DATA_SCOPE = "datawhale08-daily-v8";
+const MAX_LOCAL_EVENTS = 500;
+const EXPOSURE_THRESHOLD = 0.5;
+const EXPOSURE_DWELL_MS = 800;
+const ENGAGEMENT_CHECKPOINT_MS = 15000;
 
 function readStoredList(key) {
   try {
@@ -19,15 +30,120 @@ function writeStoredList(key, value) {
   }
 }
 
-function track(eventName, detail = {}) {
-  const events = readStoredList(ANALYTICS_KEY);
-  events.push({
-    event_name: eventName,
-    page: document.body.dataset.page,
-    timestamp: new Date().toISOString(),
-    ...detail,
+function createId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function getOrCreateStorageValue(storage, key) {
+  try {
+    const savedValue = storage.getItem(key);
+    if (savedValue) return savedValue;
+    const nextValue = createId();
+    storage.setItem(key, nextValue);
+    return nextValue;
+  } catch {
+    return createId();
+  }
+}
+
+function getDeviceType() {
+  if (window.matchMedia("(max-width: 767px)").matches) return "mobile";
+  if (window.matchMedia("(max-width: 1023px)").matches) return "tablet";
+  return "desktop";
+}
+
+function getReferrerHost() {
+  if (!document.referrer) return "direct";
+  try {
+    return new URL(document.referrer).hostname || "direct";
+  } catch {
+    return "direct";
+  }
+}
+
+function getAttribution() {
+  const search = new URLSearchParams(window.location.search);
+  const current = {
+    utm_source: search.get("utm_source") || "",
+    utm_medium: search.get("utm_medium") || "",
+    utm_campaign: search.get("utm_campaign") || "",
+  };
+
+  if (Object.values(current).some(Boolean)) {
+    if (!current.utm_source.startsWith("codex_")) {
+      try {
+        localStorage.setItem(ATTRIBUTION_KEY, JSON.stringify(current));
+      } catch {
+        // Current-page attribution remains available without storage.
+      }
+    }
+    return current;
+  }
+
+  try {
+    const stored = JSON.parse(localStorage.getItem(ATTRIBUTION_KEY) || "null");
+    return stored && typeof stored === "object" ? stored : current;
+  } catch {
+    return current;
+  }
+}
+
+const analyticsContext = {
+  anonymous_id: getOrCreateStorageValue(localStorage, VISITOR_ID_KEY),
+  session_id: getOrCreateStorageValue(sessionStorage, SESSION_ID_KEY),
+  page_path: window.location.pathname,
+  device_type: getDeviceType(),
+  referrer_host: getReferrerHost(),
+  ...getAttribution(),
+};
+
+function getAnalyticsEndpoint() {
+  const metaEndpoint = document.querySelector('meta[name="datawhale-analytics-endpoint"]')?.content;
+  return window.DATAWHALE_ANALYTICS_ENDPOINT || metaEndpoint || "";
+}
+
+function isProductionDataContext() {
+  return window.location.hostname === "ethan666hd-hub.github.io" &&
+    window.location.pathname.startsWith("/Datawhale08/") &&
+    !analyticsContext.utm_source.startsWith("codex_");
+}
+
+function sendToConfiguredEndpoint(event) {
+  const endpoint = getAnalyticsEndpoint();
+  if (!endpoint || !isProductionDataContext()) return;
+
+  fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(event),
+    keepalive: true,
+  }).catch(() => {
+    // The local queue keeps the event when the remote endpoint is unavailable.
   });
-  writeStoredList(ANALYTICS_KEY, events.slice(-200));
+}
+
+function track(eventName, detail = {}) {
+  const event = {
+    event_name: eventName,
+    event_id: createId(),
+    occurred_at: new Date().toISOString(),
+    challenge_id: CHALLENGE_ID,
+    data_scope: DATA_SCOPE,
+    page: document.body.dataset.page,
+    ...analyticsContext,
+    ...detail,
+  };
+  const events = readStoredList(ANALYTICS_KEY);
+  events.push(event);
+  writeStoredList(ANALYTICS_KEY, events.slice(-MAX_LOCAL_EVENTS));
+
+  window.dataLayer = window.dataLayer || [];
+  window.dataLayer.push({ event: eventName, ...event });
+  window.posthog?.capture?.(eventName, event);
+  window.dispatchEvent(new CustomEvent("datawhale:analytics", { detail: event }));
+  sendToConfiguredEndpoint(event);
+  return event;
 }
 
 function showToast(message) {
@@ -45,8 +161,39 @@ function showToast(message) {
 }
 
 const pageName = document.body.dataset.page;
-track(pageName === "practice" ? "challenge_view" : "home_view");
+track(pageName === "practice" ? "challenge_view" : "home_view", {
+  placement: pageName === "practice" ? "tool_guide" : "home",
+});
 
+function trackReturnVisit() {
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const previousVisit = localStorage.getItem(LAST_VISIT_KEY);
+    const recordedThisSession = sessionStorage.getItem(RETURN_VISIT_SESSION_KEY);
+    if (previousVisit && previousVisit !== today && !recordedThisSession) {
+      const daysSinceLastVisit = Math.max(1, Math.round(
+        (new Date(today).getTime() - new Date(previousVisit).getTime()) / 86400000,
+      ));
+      track("return_visit", {
+        placement: pageName === "practice" ? "tool_guide" : "home",
+        days_since_last_visit: daysSinceLastVisit,
+      });
+      sessionStorage.setItem(RETURN_VISIT_SESSION_KEY, "true");
+    }
+    localStorage.setItem(LAST_VISIT_KEY, today);
+  } catch {
+    // Return-visit tracking is optional when storage is unavailable.
+  }
+}
+
+trackReturnVisit();
+
+const pageOpenedAt = performance.now();
+let activeStartedAt = document.hidden ? null : pageOpenedAt;
+let activeDurationMs = 0;
+let reportedActiveDurationMs = 0;
+let maxScrollPercent = 0;
+let engagementSequence = 0;
 const readingProgress = document.querySelector(".reading-progress span");
 let progressFrame = 0;
 
@@ -57,6 +204,7 @@ function updateReadingProgress() {
   const scrollableHeight = document.documentElement.scrollHeight - window.innerHeight;
   const progress = scrollableHeight > 0 ? window.scrollY / scrollableHeight : 1;
   readingProgress.style.transform = `scaleX(${Math.min(1, Math.max(0, progress))})`;
+  maxScrollPercent = Math.max(maxScrollPercent, Math.round(progress * 100));
 }
 
 function requestReadingProgressUpdate() {
@@ -70,14 +218,139 @@ window.addEventListener("scroll", requestReadingProgressUpdate, { passive: true 
 window.addEventListener("resize", requestReadingProgressUpdate);
 
 document.querySelectorAll("[data-track]").forEach((element) => {
-  element.addEventListener("click", () => track(element.dataset.track));
+  element.addEventListener("click", () => track(element.dataset.track, {
+    placement: element.closest("[data-analytics-section]")?.dataset.analyticsSection || "unknown",
+    label: element.textContent.trim(),
+  }));
 });
 
 document.querySelectorAll("[data-tool]").forEach((element) => {
   element.addEventListener("click", () => {
-    track("tool_open", { tool: element.dataset.tool });
+    track("tool_open", {
+      tool: element.dataset.tool,
+      destination_host: new URL(element.href).hostname,
+      placement: "tool_guide",
+    });
   });
 });
+
+const trackedExposures = new Set();
+let requestExposureCheck = () => {};
+
+function markSectionExposure(element) {
+  const placement = element.dataset.analyticsSection;
+  const eventName = pageName === "practice" ? "challenge_section_view" : "home_section_view";
+  const trackedKey = `${eventName}:${analyticsContext.page_path}:${placement}`;
+  if (trackedExposures.has(trackedKey)) return;
+
+  try {
+    if (sessionStorage.getItem(`datawhale_daily_v6_exposure:${trackedKey}`) === "true") {
+      trackedExposures.add(trackedKey);
+      return;
+    }
+    sessionStorage.setItem(`datawhale_daily_v6_exposure:${trackedKey}`, "true");
+  } catch {
+    // In-memory dedupe still applies when session storage is unavailable.
+  }
+
+  trackedExposures.add(trackedKey);
+  track(eventName, { placement });
+}
+
+function observeSectionExposures() {
+  const sections = Array.from(document.querySelectorAll("[data-analytics-section]"));
+  if (!sections.length) return;
+
+  const dwellTimers = new Map();
+  let checkFrame = 0;
+
+  const checkExposures = () => {
+    checkFrame = 0;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+
+    sections.forEach((section) => {
+      const placement = section.dataset.analyticsSection;
+      const eventName = pageName === "practice" ? "challenge_section_view" : "home_section_view";
+      const trackedKey = `${eventName}:${analyticsContext.page_path}:${placement}`;
+      if (trackedExposures.has(trackedKey)) return;
+
+      const rect = section.getBoundingClientRect();
+      const visibleHeight = Math.max(0, Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0));
+      const comparableHeight = Math.max(1, Math.min(rect.height || viewportHeight, viewportHeight));
+      const meetsThreshold = !document.hidden && visibleHeight >= comparableHeight * EXPOSURE_THRESHOLD;
+      const timer = dwellTimers.get(section);
+
+      if (meetsThreshold) {
+        if (!timer) {
+          dwellTimers.set(section, window.setTimeout(() => {
+            markSectionExposure(section);
+            dwellTimers.delete(section);
+          }, EXPOSURE_DWELL_MS));
+        }
+      } else if (timer) {
+        window.clearTimeout(timer);
+        dwellTimers.delete(section);
+      }
+    });
+  };
+
+  requestExposureCheck = () => {
+    if (checkFrame) return;
+    checkFrame = window.requestAnimationFrame(checkExposures);
+  };
+
+  window.addEventListener("scroll", requestExposureCheck, { passive: true });
+  window.addEventListener("resize", requestExposureCheck);
+  document.addEventListener("visibilitychange", requestExposureCheck);
+  checkExposures();
+}
+
+observeSectionExposures();
+
+function captureActiveDuration(now = performance.now()) {
+  if (activeStartedAt === null) return;
+  activeDurationMs += Math.max(0, now - activeStartedAt);
+  activeStartedAt = now;
+}
+
+function trackEngagement(reason, force = false) {
+  const now = performance.now();
+  captureActiveDuration(now);
+  const deltaMs = activeDurationMs - reportedActiveDurationMs;
+  if (deltaMs <= 0) return;
+  if (!force && deltaMs < 1000) return;
+
+  reportedActiveDurationMs = activeDurationMs;
+  engagementSequence += 1;
+  track("page_engagement", {
+    placement: pageName === "practice" ? "tool_guide" : "home",
+    reason,
+    sequence: engagementSequence,
+    active_duration_ms: Math.round(activeDurationMs),
+    active_delta_ms: Math.max(0, Math.round(deltaMs)),
+    elapsed_duration_ms: Math.round(now - pageOpenedAt),
+    max_scroll_percent: maxScrollPercent,
+  });
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    trackEngagement("hidden");
+    activeStartedAt = null;
+    return;
+  }
+  activeStartedAt = performance.now();
+});
+
+window.addEventListener("pagehide", () => trackEngagement("pagehide", true));
+window.setInterval(() => trackEngagement("checkpoint"), ENGAGEMENT_CHECKPOINT_MS);
+
+window.datawhaleAnalytics = {
+  challengeId: CHALLENGE_ID,
+  dataScope: DATA_SCOPE,
+  getEvents: () => readStoredList(ANALYTICS_KEY),
+  track,
+};
 
 const favoriteButton = document.querySelector(".favorite-button");
 const favoriteIcon = favoriteButton?.querySelector(".favorite-icon");
@@ -107,7 +380,7 @@ favoriteButton?.addEventListener("click", () => {
   } catch {
     // The selected state still works for the current page view.
   }
-  track("favorite_click", { result: "success" });
+  track("favorite_click", { placement: "practice_header", result: "success" });
 });
 
 const feedbackButtons = Array.from(document.querySelectorAll("[data-feedback]"));
@@ -140,7 +413,8 @@ feedbackButtons.forEach((button) => {
     });
 
     if (feedbackForm) feedbackForm.hidden = false;
-    track("feedback_select", { status: feedbackStatus });
+    requestExposureCheck();
+    track("feedback_select", { placement: "feedback_section", status: feedbackStatus });
     showToast("成果状态已记录，欢迎再留下一条收获");
     updateFeedbackSubmit();
   });
@@ -159,6 +433,11 @@ feedbackImage?.addEventListener("change", () => {
   }
 
   feedbackImageFile = file;
+  track("feedback_image_select", {
+    placement: "feedback_detail_form",
+    file_type: file.type || "unknown",
+    file_size_bucket: file.size < 1024 * 1024 ? "under_1mb" : "1mb_to_5mb",
+  });
   const reader = new FileReader();
   reader.addEventListener("load", () => {
     if (feedbackPreviewImage && typeof reader.result === "string") {
@@ -175,6 +454,7 @@ removeImageButton?.addEventListener("click", () => {
   if (feedbackImage) feedbackImage.value = "";
   if (feedbackPreviewImage) feedbackPreviewImage.removeAttribute("src");
   if (feedbackPreview) feedbackPreview.hidden = true;
+  track("feedback_image_remove", { placement: "feedback_detail_form" });
   updateFeedbackSubmit();
 });
 
@@ -193,6 +473,7 @@ feedbackForm?.addEventListener("submit", (event) => {
   });
   writeStoredList(FEEDBACK_KEY, feedbackRecords.slice(-50));
   track("feedback_submit", {
+    placement: "feedback_detail_form",
     status: feedbackStatus,
     has_text: Boolean(feedbackMessage?.value.trim()),
     has_image: Boolean(feedbackImageFile),
