@@ -65,12 +65,12 @@ begin
     from pg_policies
     where schemaname = 'public'
       and tablename = 'daily_v8_analytics_events'
-      and policyname = 'daily_v8_analytics_events_select_public'
+      and policyname = 'daily_v8_analytics_events_select_authenticated'
   ) then
-    create policy daily_v8_analytics_events_select_public
+    create policy daily_v8_analytics_events_select_authenticated
       on public.daily_v8_analytics_events
       for select
-      to anon, authenticated
+      to authenticated
       using (
         challenge_id = 'ai-tool-guide-2026-09-02'
         and properties ->> 'data_scope' = 'datawhale08-daily-v8'

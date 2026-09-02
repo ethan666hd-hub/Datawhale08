@@ -12,6 +12,8 @@ const MAX_LOCAL_EVENTS = 500;
 const EXPOSURE_THRESHOLD = 0.5;
 const EXPOSURE_DWELL_MS = 800;
 const ENGAGEMENT_CHECKPOINT_MS = 15000;
+const SUPABASE_ANALYTICS_URL = "https://fjsdilkacsaarxnqrdmm.supabase.co/rest/v1/daily_v8_analytics_events";
+const SUPABASE_ANON_KEY = "sb_publishable_LKFWLPhFegq-KScuSQzfXw_2rYSuTfn";
 
 function readStoredList(key) {
   try {
@@ -100,7 +102,7 @@ const analyticsContext = {
 
 function getAnalyticsEndpoint() {
   const metaEndpoint = document.querySelector('meta[name="datawhale-analytics-endpoint"]')?.content;
-  return window.DATAWHALE_ANALYTICS_ENDPOINT || metaEndpoint || "";
+  return window.DATAWHALE_ANALYTICS_ENDPOINT || metaEndpoint || SUPABASE_ANALYTICS_URL;
 }
 
 function isProductionDataContext() {
@@ -109,18 +111,77 @@ function isProductionDataContext() {
     !analyticsContext.utm_source.startsWith("codex_");
 }
 
-function sendToConfiguredEndpoint(event) {
-  const endpoint = getAnalyticsEndpoint();
-  if (!endpoint || !isProductionDataContext()) return;
+function toAnalyticsRecord(event) {
+  const columnNames = new Set([
+    "event_id",
+    "event_name",
+    "occurred_at",
+    "page_path",
+    "challenge_id",
+    "anonymous_id",
+    "session_id",
+    "device_type",
+    "referrer_host",
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "placement",
+    "result",
+    "status",
+  ]);
+  const record = Object.fromEntries(
+    Object.entries(event).filter(([key]) => columnNames.has(key)),
+  );
+  record.properties = Object.fromEntries(
+    Object.entries(event).filter(([key, value]) => !columnNames.has(key) && value !== undefined),
+  );
+  return record;
+}
 
-  fetch(endpoint, {
+function markEventsSynced(eventIds) {
+  const syncedIds = new Set(eventIds);
+  const events = readStoredList(ANALYTICS_KEY).map((event) => (
+    syncedIds.has(event.event_id) ? { ...event, synced_at: new Date().toISOString() } : event
+  ));
+  writeStoredList(ANALYTICS_KEY, events);
+}
+
+function sendToConfiguredEndpoint(events) {
+  const endpoint = getAnalyticsEndpoint();
+  const pendingEvents = (Array.isArray(events) ? events : [events]).filter((event) => (
+    event?.event_id && event.challenge_id === CHALLENGE_ID && !event.synced_at
+  ));
+  if (!endpoint || !isProductionDataContext() || !pendingEvents.length) return;
+
+  const batch = pendingEvents.slice(0, 20);
+  const isSupabaseEndpoint = endpoint === SUPABASE_ANALYTICS_URL;
+  const headers = { "Content-Type": "application/json" };
+  if (isSupabaseEndpoint) {
+    headers.apikey = SUPABASE_ANON_KEY;
+    headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`;
+    headers.Prefer = "return=minimal";
+  }
+
+  const sendRequest = (event) => fetch(endpoint, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(event),
+    headers,
+    body: JSON.stringify(isSupabaseEndpoint ? toAnalyticsRecord(event) : [toAnalyticsRecord(event)]),
     keepalive: true,
-  }).catch(() => {
-    // The local queue keeps the event when the remote endpoint is unavailable.
+  }).then((response) => ({ event, response })).catch(() => ({ event, response: null }));
+
+  Promise.all(batch.map(sendRequest)).then((results) => {
+    const syncedEventIds = results
+      .filter(({ response }) => response?.ok || response?.status === 409)
+      .map(({ event }) => event.event_id);
+    if (syncedEventIds.length) markEventsSynced(syncedEventIds);
+    if (syncedEventIds.length && pendingEvents.length > batch.length) {
+      syncStoredEvents();
+    }
   });
+}
+
+function syncStoredEvents() {
+  sendToConfiguredEndpoint(readStoredList(ANALYTICS_KEY));
 }
 
 function track(eventName, detail = {}) {
@@ -161,6 +222,7 @@ function showToast(message) {
 }
 
 const pageName = document.body.dataset.page;
+syncStoredEvents();
 track(pageName === "practice" ? "challenge_view" : "home_view", {
   placement: pageName === "practice" ? "tool_guide" : "home",
 });

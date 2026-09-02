@@ -44,7 +44,7 @@ function createHarness() {
   const sections = [createSection("tool_guide"), createSection("feedback_section")];
   const progress = { style: {} };
   let now = 100;
-  let fetchCount = 0;
+  const requests = [];
 
   document.body = { dataset: { page: "practice" } };
   document.documentElement = { scrollHeight: 1800, clientHeight: 800 };
@@ -89,9 +89,9 @@ function createHarness() {
     },
     Date,
     document,
-    fetch: async () => {
-      fetchCount += 1;
-      return { ok: true };
+    fetch: async (...args) => {
+      requests.push(args);
+      return { ok: true, status: 201 };
     },
     globalThis: null,
     localStorage,
@@ -106,7 +106,7 @@ function createHarness() {
   return {
     context,
     document,
-    getFetchCount: () => fetchCount,
+    getRequests: () => requests,
     setNow: (value) => {
       now = value;
     },
@@ -164,5 +164,25 @@ test("tracks page views, qualified exposures, and visible engagement", async () 
   harness.window.dispatchEvent({ type: "pagehide" });
   engagement = harness.window.dataLayer.filter((event) => event.event_name === "page_engagement");
   assert.equal(engagement.length, 2);
-  assert.equal(harness.getFetchCount(), 0);
+  assert.equal(harness.getRequests().length, 0);
+});
+
+test("sends production events through the restricted insert endpoint", async () => {
+  const harness = createHarness();
+  harness.window.location.hostname = "ethan666hd-hub.github.io";
+  harness.window.location.search = "";
+  const source = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  vm.runInNewContext(source, harness.context, { filename: "app.js" });
+
+  await Promise.resolve();
+  const requests = harness.getRequests();
+  assert.equal(requests.length, 1);
+  assert.match(requests[0][0], /\/rest\/v1\/daily_v8_analytics_events$/);
+  assert.equal(requests[0][1].method, "POST");
+  assert.ok(requests[0][1].headers.apikey);
+
+  const payload = JSON.parse(requests[0][1].body);
+  assert.equal(payload.event_name, "challenge_view");
+  assert.equal(payload.challenge_id, "ai-tool-guide-2026-09-02");
+  assert.equal(payload.properties.data_scope, "datawhale08-daily-v8");
 });
