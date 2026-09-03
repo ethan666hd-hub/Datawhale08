@@ -5,6 +5,7 @@ import { extname, join, normalize, resolve, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
 
 const BASE_PATH = "/daily-v8";
+const PRACTICE_PATH = `${BASE_PATH}/practice.html`;
 const PUBLIC_ROOT = process.env.STATIC_ROOT
   ? resolve(process.env.STATIC_ROOT)
   : join(import.meta.dirname, "public");
@@ -30,16 +31,18 @@ function send(response, status, body, headers = {}) {
 }
 
 createServer(async (request, response) => {
+  let requestUrl;
   let pathname;
   try {
-    pathname = decodeURIComponent(new URL(request.url || "/", "http://localhost").pathname);
+    requestUrl = new URL(request.url || "/", "http://localhost");
+    pathname = decodeURIComponent(requestUrl.pathname);
   } catch {
     send(response, 400, "Bad request");
     return;
   }
 
-  if (pathname === BASE_PATH) {
-    send(response, 308, "Permanent redirect", { Location: `${BASE_PATH}/` });
+  if (pathname === BASE_PATH || pathname === `${BASE_PATH}/`) {
+    send(response, 302, "Found", { Location: `${PRACTICE_PATH}${requestUrl.search}` });
     return;
   }
   if (!pathname.startsWith(`${BASE_PATH}/`)) {

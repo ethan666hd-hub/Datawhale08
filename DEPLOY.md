@@ -6,7 +6,8 @@
 - 容器：`datawhale08-daily-v8`
 - 本机端口：`127.0.0.1:18097`
 - Nginx 配置：`/etc/nginx/conf.d/demo.datawhale.cn/10-daily-v8.conf`
-- 正式地址：`https://demo.datawhale.cn/daily-v8/`
+- 正式默认入口：`https://demo.datawhale.cn/daily-v8/`（跳转到实践页）
+- 正式介绍页：`https://demo.datawhale.cn/daily-v8/index.html`
 
 发布目录只包含网页静态文件和 `deploy/server.mjs`。`current` 软链接指向当前 release，便于后续更新和回退。
 

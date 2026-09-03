@@ -2,13 +2,14 @@
 
 Datawhale 每日一试第六期：AI 工具选用推荐指南
 
-- 首页：`index.html`
+- 介绍页：`index.html`
 - 实践页：`practice.html`
 - 数据看板：`platform-demo/index.html`
 
 ## 线上地址
 
-- 正式网站：<https://demo.datawhale.cn/daily-v8/>
+- 正式默认入口（直接进入工具表）：<https://demo.datawhale.cn/daily-v8/>
+- 正式介绍页：<https://demo.datawhale.cn/daily-v8/index.html>
 - 正式实践页：<https://demo.datawhale.cn/daily-v8/practice.html>
 - 正式数据看板：<https://demo.datawhale.cn/daily-v8/platform-demo/>
 - GitHub Pages 预览：<https://ethan666hd-hub.github.io/Datawhale08/>
