@@ -177,7 +177,7 @@ test("sends production events through the restricted insert endpoint", async () 
   await Promise.resolve();
   const requests = harness.getRequests();
   assert.equal(requests.length, 1);
-  assert.match(requests[0][0], /\/rest\/v1\/analytics_events$/);
+  assert.match(requests[0][0], /\/rest\/v1\/daily_v8_analytics_events$/);
   assert.equal(requests[0][1].method, "POST");
   assert.ok(requests[0][1].headers.apikey);
 
@@ -185,6 +185,24 @@ test("sends production events through the restricted insert endpoint", async () 
   assert.equal(payload.event_name, "challenge_view");
   assert.equal(payload.challenge_id, "ai-tool-guide-2026-09-02");
   assert.equal(payload.properties.data_scope, "datawhale08-daily-v8");
+
+  assert.equal(
+    vm.runInNewContext(
+      "getShanghaiDateKey(new Date('2026-09-02T16:30:00Z'))",
+      harness.context,
+    ),
+    "2026-09-03",
+  );
+});
+
+test("classifies same-site navigation as an internal source", () => {
+  const harness = createHarness();
+  harness.window.location.hostname = "ethan666hd-hub.github.io";
+  harness.document.referrer = "https://ethan666hd-hub.github.io/Datawhale08/index.html";
+  const source = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  vm.runInNewContext(source, harness.context, { filename: "app.js" });
+
+  assert.equal(harness.window.dataLayer[0].referrer_host, "internal");
 });
 
 test("keeps feedback records private and the dashboard free of private reads", () => {
@@ -197,9 +215,10 @@ test("keeps feedback records private and the dashboard free of private reads", (
   assert.match(appSource, /reflection:\s*message/);
   assert.match(appSource, /image_url:\s*imageUrl/);
 
-  assert.match(dashboardSource, /rest\/v1\/analytics_events/);
+  assert.match(dashboardSource, /rpc\/daily_v8_public_events/);
   assert.match(dashboardSource, /event_name === "feedback_submit"/);
   assert.doesNotMatch(dashboardSource, /challenge_feedback/);
-  assert.doesNotMatch(dashboardSource, /daily_v8_analytics_events/);
+  assert.doesNotMatch(dashboardSource, /rest\/v1\/analytics_events/);
+  assert.doesNotMatch(dashboardSource, /rest\/v1\/daily_v8_analytics_events/);
   assert.doesNotMatch(dashboardSource, /anonymous_id/);
 });

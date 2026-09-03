@@ -1,5 +1,6 @@
 const SUPABASE_PROJECT_URL = "https://fjsdilkacsaarxnqrdmm.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_LKFWLPhFegq-KScuSQzfXw_2rYSuTfn";
+const ANALYTICS_RPC_URL = `${SUPABASE_PROJECT_URL}/rest/v1/rpc/daily_v8_public_events`;
 const CHALLENGE_ID = "ai-tool-guide-2026-09-02";
 const ANALYTICS_START_AT = "2026-09-02T00:00:00+08:00";
 const REFRESH_INTERVAL_MS = 10000;
@@ -67,41 +68,19 @@ async function fetchEvents(since = "") {
   let offset = 0;
 
   for (let page = 0; page < 20; page += 1) {
-    const query = new URLSearchParams({
-      select: [
-        "event_id",
-        "event_name",
-        "occurred_at",
-        "page_path",
-        "session_id",
-        "device_type",
-        "referrer_host",
-        "utm_source",
-        "placement",
-        "result",
-        "status",
-        "has_text",
-        "has_image",
-        "submit_mode",
-        "text_length_bucket",
-        "properties",
-      ].join(","),
-      challenge_id: `eq.${CHALLENGE_ID}`,
-      utm_source: "not.like.codex_*",
-      order: "occurred_at.asc",
-      limit: String(PAGE_SIZE),
-      offset: String(offset),
+    const response = await fetch(ANALYTICS_RPC_URL, {
+      method: "POST",
+      headers: getHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        p_since: since || ANALYTICS_START_AT,
+        p_limit: PAGE_SIZE,
+        p_offset: offset,
+      }),
     });
-    query.set("occurred_at", since ? `gte.${since}` : `gte.${ANALYTICS_START_AT}`);
-
-    const response = await fetch(
-      `${SUPABASE_PROJECT_URL}/rest/v1/analytics_events?${query}`,
-      { headers: getHeaders() },
-    );
-    if (!response.ok) throw new Error(`analytics_events_${response.status}`);
+    if (!response.ok) throw new Error(`daily_v8_public_events_${response.status}`);
 
     const pageRows = await response.json();
-    if (!Array.isArray(pageRows)) throw new Error("analytics_events_invalid_response");
+    if (!Array.isArray(pageRows)) throw new Error("daily_v8_public_events_invalid_response");
     rows.push(...pageRows);
     if (pageRows.length < PAGE_SIZE) break;
     offset += PAGE_SIZE;
@@ -184,6 +163,29 @@ function getFeedbackEvents(events) {
   ));
 }
 
+function getLatestBySession(events) {
+  const latest = new Map();
+  events.forEach((event) => latest.set(getSessionKey(event), event));
+  return Array.from(latest.values());
+}
+
+function getSessionEntryEvents(events) {
+  const entries = new Map();
+  events.filter((event) => ["home_view", "challenge_view"].includes(event.event_name))
+    .forEach((event) => {
+      const key = getSessionKey(event);
+      if (!entries.has(key)) entries.set(key, event);
+    });
+  return entries;
+}
+
+function getSourceLabel(event) {
+  if (event.utm_source) return event.utm_source;
+  if (!event.referrer_host || event.referrer_host === "direct") return "直接访问";
+  if (["internal", "ethan666hd-hub.github.io"].includes(event.referrer_host)) return "站内跳转";
+  return event.referrer_host;
+}
+
 function getOverview(events) {
   const pageViews = events.filter((event) => ["home_view", "challenge_view"].includes(event.event_name));
   const feedbackEvents = getFeedbackEvents(events);
@@ -219,6 +221,10 @@ function renderOverview(overview) {
 function renderDevices(events) {
   const container = document.querySelector("#device-summary");
   const pageViewNames = new Set(["home_view", "challenge_view"]);
+  const entryEvents = getSessionEntryEvents(events);
+  const sessionDevices = new Map(
+    Array.from(entryEvents, ([key, event]) => [key, event.device_type]),
+  );
   const totalEntries = countUnique(events, (event) => pageViewNames.has(event.event_name));
   const definitions = [
     { key: "desktop", label: "PC 端", matches: (value) => value === "desktop" },
@@ -226,7 +232,9 @@ function renderDevices(events) {
   ];
 
   const columns = definitions.map((definition) => {
-    const deviceEvents = events.filter((event) => definition.matches(event.device_type));
+    const deviceEvents = events.filter((event) => definition.matches(
+      sessionDevices.get(getSessionKey(event)) || event.device_type,
+    ));
     const entries = countUnique(deviceEvents, (event) => pageViewNames.has(event.event_name));
     const practice = countUnique(deviceEvents, (event) => event.event_name === "challenge_view");
     const guide = countUnique(deviceEvents, (event) =>
@@ -264,14 +272,39 @@ function renderDevices(events) {
 }
 
 function getFunnel(events) {
-  return [
-    { label: "首页访问", value: countUnique(events, (event) => event.event_name === "home_view") },
-    { label: "实践页到达", value: countUnique(events, (event) => event.event_name === "challenge_view") },
-    { label: "推荐表曝光", value: countUnique(events, (event) => event.event_name === "challenge_section_view" && event.placement === "tool_guide") },
-    { label: "工具点击", value: countUnique(events, (event) => event.event_name === "tool_open") },
-    { label: "反馈区曝光", value: countUnique(events, (event) => event.event_name === "challenge_section_view" && event.placement === "feedback_section") },
-    { label: "完整反馈", value: countUnique(events, (event) => event.event_name === "feedback_submit" && event.result === "success") },
+  const definitions = [
+    { label: "站点会话", matches: (event) => ["home_view", "challenge_view"].includes(event.event_name) },
+    { label: "实践页到达", matches: (event) => event.event_name === "challenge_view" },
+    { label: "推荐表曝光", matches: (event) => event.event_name === "challenge_section_view" && event.placement === "tool_guide" },
+    { label: "反馈区曝光", matches: (event) => event.event_name === "challenge_section_view" && event.placement === "feedback_section" },
+    { label: "选择反馈状态", matches: (event) => event.event_name === "feedback_select" },
+    { label: "完整反馈", matches: (event) => event.event_name === "feedback_submit" && event.result === "success" },
   ];
+  const sessions = new Map();
+  events.forEach((event) => {
+    const key = getSessionKey(event);
+    const sessionEvents = sessions.get(key) || [];
+    sessionEvents.push(event);
+    sessions.set(key, sessionEvents);
+  });
+  const counts = Array(definitions.length).fill(0);
+
+  sessions.forEach((sessionEvents) => {
+    let cursor = 0;
+    for (let index = 0; index < definitions.length; index += 1) {
+      const matchIndex = sessionEvents.findIndex((event, eventIndex) => (
+        eventIndex >= cursor && definitions[index].matches(event)
+      ));
+      if (matchIndex === -1) break;
+      counts[index] += 1;
+      cursor = matchIndex;
+    }
+  });
+
+  return definitions.map((definition, index) => ({
+    label: definition.label,
+    value: counts[index],
+  }));
 }
 
 function renderFunnel(events) {
@@ -344,10 +377,10 @@ function renderRankings(events) {
     "等待页面产生有效曝光后显示排行。",
   );
 
-  const viewEvents = events.filter((event) => ["home_view", "challenge_view"].includes(event.event_name));
+  const viewEvents = Array.from(getSessionEntryEvents(events).values());
   const sourceRanking = buildRanking(
     viewEvents,
-    (event) => event.utm_source || (event.referrer_host === "direct" ? "直接访问" : event.referrer_host) || "直接访问",
+    getSourceLabel,
   );
   renderRanking("#source-ranking", sourceRanking, (key) => key, "等待真实访问后显示来源。");
 }
@@ -379,10 +412,16 @@ function getEngagement(events) {
   const averageScroll = records.length
     ? Math.round(records.reduce((sum, record) => sum + record.scroll, 0) / records.length)
     : 0;
+  const favoriteStates = new Map();
+  events.filter((event) => event.event_name === "favorite_click").forEach((event) => {
+    const selected = event.properties?.selected;
+    favoriteStates.set(getSessionKey(event), selected !== false);
+  });
+
   return {
     averageDuration,
     averageScroll,
-    favorites: countUnique(events, (event) => event.event_name === "favorite_click"),
+    favorites: Array.from(favoriteStates.values()).filter(Boolean).length,
     returns: countUnique(events, (event) => event.event_name === "return_visit"),
   };
 }
@@ -397,8 +436,8 @@ function renderEngagement(events) {
 
 function renderFeedbackSummary(events) {
   const container = document.querySelector("#feedback-summary");
-  const feedbackEvents = getFeedbackEvents(events);
-  const feedbackSessions = countUnique(feedbackEvents);
+  const feedbackEvents = getLatestBySession(getFeedbackEvents(events));
+  const feedbackSessions = feedbackEvents.length;
   setText("#feedback-total", `${formatCount(feedbackSessions)} 个会话`);
 
   const definitions = [

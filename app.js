@@ -13,9 +13,9 @@ const EXPOSURE_THRESHOLD = 0.5;
 const EXPOSURE_DWELL_MS = 800;
 const ENGAGEMENT_CHECKPOINT_MS = 15000;
 const SUPABASE_PROJECT_URL = "https://fjsdilkacsaarxnqrdmm.supabase.co";
-const SUPABASE_ANALYTICS_URL = `${SUPABASE_PROJECT_URL}/rest/v1/analytics_events`;
+const SUPABASE_ANALYTICS_URL = `${SUPABASE_PROJECT_URL}/rest/v1/daily_v8_analytics_events`;
 const SUPABASE_FEEDBACK_URL = `${SUPABASE_PROJECT_URL}/rest/v1/daily_v8_analytics_events`;
-const SUPABASE_FEEDBACK_BUCKET = "challenge-feedback";
+const SUPABASE_FEEDBACK_BUCKET = "daily-v8-feedback";
 const SUPABASE_ANON_KEY = "sb_publishable_LKFWLPhFegq-KScuSQzfXw_2rYSuTfn";
 
 function readStoredList(key) {
@@ -61,10 +61,23 @@ function getDeviceType() {
 function getReferrerHost() {
   if (!document.referrer) return "direct";
   try {
-    return new URL(document.referrer).hostname || "direct";
+    const hostname = new URL(document.referrer).hostname;
+    if (!hostname) return "direct";
+    return hostname === window.location.hostname ? "internal" : hostname;
   } catch {
     return "direct";
   }
+}
+
+function getShanghaiDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: "Asia/Shanghai",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 function getAttribution() {
@@ -239,7 +252,7 @@ track(pageName === "practice" ? "challenge_view" : "home_view", {
 });
 
 function trackReturnVisit() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getShanghaiDateKey();
   try {
     const previousVisit = localStorage.getItem(LAST_VISIT_KEY);
     const recordedThisSession = sessionStorage.getItem(RETURN_VISIT_SESSION_KEY);
@@ -583,7 +596,7 @@ async function uploadFeedbackImage(file) {
 
   return {
     imagePath,
-    imageUrl: `${SUPABASE_PROJECT_URL}/storage/v1/object/public/${SUPABASE_FEEDBACK_BUCKET}/${encodedPath}`,
+    imageUrl: "",
   };
 }
 
