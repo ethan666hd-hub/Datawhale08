@@ -14,7 +14,7 @@ const EXPOSURE_DWELL_MS = 800;
 const ENGAGEMENT_CHECKPOINT_MS = 15000;
 const SUPABASE_PROJECT_URL = "https://fjsdilkacsaarxnqrdmm.supabase.co";
 const SUPABASE_ANALYTICS_URL = `${SUPABASE_PROJECT_URL}/rest/v1/analytics_events`;
-const SUPABASE_FEEDBACK_URL = `${SUPABASE_PROJECT_URL}/rest/v1/challenge_feedback`;
+const SUPABASE_FEEDBACK_URL = `${SUPABASE_PROJECT_URL}/rest/v1/daily_v8_analytics_events`;
 const SUPABASE_FEEDBACK_BUCKET = "challenge-feedback";
 const SUPABASE_ANON_KEY = "sb_publishable_LKFWLPhFegq-KScuSQzfXw_2rYSuTfn";
 
@@ -592,14 +592,13 @@ async function insertFeedbackRecord(record) {
     method: "POST",
     headers: getSupabaseHeaders({
       "Content-Type": "application/json",
-      Prefer: "return=representation",
+      Prefer: "return=minimal",
     }),
     body: JSON.stringify(record),
   });
 
   if (!response.ok) throw new Error(`feedback_insert_${response.status}`);
-  const rows = await response.json();
-  return Array.isArray(rows) ? rows[0] : rows;
+  return record;
 }
 
 function resetFeedbackForm() {
@@ -655,25 +654,39 @@ feedbackForm?.addEventListener("submit", async (event) => {
   try {
     const { imagePath, imageUrl } = await uploadFeedbackImage(imageFile);
     const savedRecord = await insertFeedbackRecord({
+      event_id: feedbackId,
+      event_name: "feedback_record",
+      occurred_at: new Date().toISOString(),
+      page_path: analyticsContext.page_path,
       challenge_id: CHALLENGE_ID,
-      challenge_title: "AI工具选用推荐指南",
-      status: feedbackStatus,
-      reflection: message,
-      image_url: imageUrl,
-      image_path: imagePath,
-      image_alt: imageFile ? "用户提交的工具使用反馈图片" : "",
-      image_name: imageFile?.name || "",
       anonymous_id: analyticsContext.anonymous_id,
       session_id: analyticsContext.session_id,
+      device_type: analyticsContext.device_type,
+      referrer_host: analyticsContext.referrer_host,
       utm_source: analyticsContext.utm_source,
       utm_medium: analyticsContext.utm_medium,
       utm_campaign: analyticsContext.utm_campaign,
-      source_page: analyticsContext.page_path,
+      placement: "feedback_detail_form",
+      result: "success",
+      status: feedbackStatus,
+      properties: {
+        data_scope: DATA_SCOPE,
+        challenge_title: "AI工具选用推荐指南",
+        reflection: message,
+        image_url: imageUrl,
+        image_path: imagePath,
+        image_alt: imageFile ? "用户提交的工具使用反馈图片" : "",
+        image_name: imageFile?.name || "",
+        has_text: Boolean(message),
+        has_image: Boolean(imageFile),
+        submit_mode: submitMode,
+        text_length_bucket: textLengthBucket,
+      },
     });
 
     const updatedRecords = readStoredList(FEEDBACK_KEY).map((record) => (
       record.feedback_id === feedbackId
-        ? { ...record, remote_id: savedRecord?.id || "", synced_at: new Date().toISOString() }
+        ? { ...record, remote_id: savedRecord?.event_id || "", synced_at: new Date().toISOString() }
         : record
     ));
     writeStoredList(FEEDBACK_KEY, updatedRecords);

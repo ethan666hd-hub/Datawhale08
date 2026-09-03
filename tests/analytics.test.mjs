@@ -186,3 +186,20 @@ test("sends production events through the restricted insert endpoint", async () 
   assert.equal(payload.challenge_id, "ai-tool-guide-2026-09-02");
   assert.equal(payload.properties.data_scope, "datawhale08-daily-v8");
 });
+
+test("keeps feedback records private and the dashboard free of private reads", () => {
+  const appSource = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  const dashboardSource = readFileSync(new URL("../dashboard.js", import.meta.url), "utf8");
+
+  assert.match(appSource, /rest\/v1\/daily_v8_analytics_events/);
+  assert.match(appSource, /event_name:\s*"feedback_record"/);
+  assert.match(appSource, /data_scope:\s*DATA_SCOPE/);
+  assert.match(appSource, /reflection:\s*message/);
+  assert.match(appSource, /image_url:\s*imageUrl/);
+
+  assert.match(dashboardSource, /rest\/v1\/analytics_events/);
+  assert.match(dashboardSource, /event_name === "feedback_submit"/);
+  assert.doesNotMatch(dashboardSource, /challenge_feedback/);
+  assert.doesNotMatch(dashboardSource, /daily_v8_analytics_events/);
+  assert.doesNotMatch(dashboardSource, /anonymous_id/);
+});

@@ -7,8 +7,8 @@
     <meta name="theme-color" content="#ffe17c" />
     <title>第六期数据看板 | Datawhale 每日一试</title>
     <link rel="icon" href="../assets/datawhale.svg" />
-    <link rel="stylesheet" href="../dashboard.css?v=20260902-dashboard-v1" />
-    <script type="module" src="../dashboard.js?v=20260902-dashboard-v1"></script>
+    <link rel="stylesheet" href="../dashboard.css?v=20260903-dashboard-v2" />
+    <script type="module" src="../dashboard.js?v=20260903-dashboard-v2"></script>
   </head>
   <body>
     <a class="skip-link" href="#dashboard-main">跳到数据内容</a>
@@ -45,7 +45,7 @@
       </section>
 
       <section class="kpi-strip" aria-label="核心数据">
-        <article><span>独立访客</span><strong data-metric="visitors">0</strong><small>匿名用户</small></article>
+        <article><span>首页到达</span><strong data-metric="homeSessions">0</strong><small>独立会话</small></article>
         <article><span>站点会话</span><strong data-metric="sessions">0</strong><small>首页与实践页去重</small></article>
         <article class="kpi-accent"><span>实践页到达</span><strong data-metric="practiceSessions">0</strong><small data-metric-note="practiceRate">占站点会话 0%</small></article>
         <article><span>工具点击</span><strong data-metric="toolClicks">0</strong><small data-metric-note="toolUsers">0 个点击会话</small></article>
@@ -118,10 +118,10 @@
 
       <section class="data-panel feedback-panel">
         <header class="panel-heading panel-heading-inline">
-          <div><span>完整反馈</span><h2>评论与图片</h2></div>
-          <strong class="panel-count" id="feedback-total">0 条</strong>
+          <div><span>反馈概况</span><h2>完成情况与提交形式</h2></div>
+          <strong class="panel-count" id="feedback-total">0 个会话</strong>
         </header>
-        <div class="feedback-records" id="feedback-records"></div>
+        <div class="feedback-summary" id="feedback-summary"></div>
       </section>
 
       <section class="data-panel event-panel">

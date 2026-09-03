@@ -7,9 +7,7 @@ const PAGE_SIZE = 1000;
 
 const state = {
   events: new Map(),
-  feedback: new Map(),
   latestEventAt: "",
-  latestFeedbackAt: "",
   mode: "minute",
   loading: false,
   initialized: false,
@@ -64,29 +62,46 @@ function getHeaders(extra = {}) {
   };
 }
 
-async function fetchRows(table, timeField, since = "") {
+async function fetchEvents(since = "") {
   const rows = [];
   let offset = 0;
 
   for (let page = 0; page < 20; page += 1) {
     const query = new URLSearchParams({
-      select: "*",
+      select: [
+        "event_id",
+        "event_name",
+        "occurred_at",
+        "page_path",
+        "session_id",
+        "device_type",
+        "referrer_host",
+        "utm_source",
+        "placement",
+        "result",
+        "status",
+        "has_text",
+        "has_image",
+        "submit_mode",
+        "text_length_bucket",
+        "properties",
+      ].join(","),
       challenge_id: `eq.${CHALLENGE_ID}`,
       utm_source: "not.like.codex_*",
-      order: `${timeField}.asc`,
+      order: "occurred_at.asc",
       limit: String(PAGE_SIZE),
       offset: String(offset),
     });
-    query.set(timeField, since ? `gte.${since}` : `gte.${ANALYTICS_START_AT}`);
+    query.set("occurred_at", since ? `gte.${since}` : `gte.${ANALYTICS_START_AT}`);
 
     const response = await fetch(
-      `${SUPABASE_PROJECT_URL}/rest/v1/${table}?${query}`,
+      `${SUPABASE_PROJECT_URL}/rest/v1/analytics_events?${query}`,
       { headers: getHeaders() },
     );
-    if (!response.ok) throw new Error(`${table}_${response.status}`);
+    if (!response.ok) throw new Error(`analytics_events_${response.status}`);
 
     const pageRows = await response.json();
-    if (!Array.isArray(pageRows)) throw new Error(`${table}_invalid_response`);
+    if (!Array.isArray(pageRows)) throw new Error("analytics_events_invalid_response");
     rows.push(...pageRows);
     if (pageRows.length < PAGE_SIZE) break;
     offset += PAGE_SIZE;
@@ -96,7 +111,7 @@ async function fetchRows(table, timeField, since = "") {
 }
 
 function getSessionKey(item) {
-  return item.session_id || item.anonymous_id || item.event_id || item.id || "unknown";
+  return item.session_id || item.event_id || "unknown";
 }
 
 function officialItems(items) {
@@ -163,29 +178,30 @@ function getEvents() {
   );
 }
 
-function getFeedback() {
-  return officialItems(Array.from(state.feedback.values())).sort(
-    (left, right) => new Date(right.created_at) - new Date(left.created_at),
-  );
+function getFeedbackEvents(events) {
+  return events.filter((event) => (
+    event.event_name === "feedback_submit" && event.result === "success"
+  ));
 }
 
-function getOverview(events, feedback) {
+function getOverview(events) {
   const pageViews = events.filter((event) => ["home_view", "challenge_view"].includes(event.event_name));
+  const feedbackEvents = getFeedbackEvents(events);
+  const homeSessions = countUnique(events, (event) => event.event_name === "home_view");
   const sessions = countUnique(pageViews);
-  const visitors = new Set(pageViews.map((event) => event.anonymous_id).filter(Boolean)).size;
   const practiceSessions = countUnique(events, (event) => event.event_name === "challenge_view");
   const toolEvents = events.filter((event) => event.event_name === "tool_open");
   const toolUsers = countUnique(toolEvents);
-  const feedbackSessions = new Set(feedback.map(getSessionKey)).size;
+  const feedbackSessions = countUnique(feedbackEvents);
 
   return {
-    visitors,
+    homeSessions,
     sessions,
     practiceSessions,
     practiceRate: toPercent(practiceSessions, sessions),
     toolClicks: toolEvents.length,
     toolUsers,
-    feedbackCount: feedback.length,
+    feedbackCount: feedbackSessions,
     feedbackRate: toPercent(feedbackSessions, practiceSessions),
   };
 }
@@ -200,7 +216,7 @@ function renderOverview(overview) {
   setText("[data-metric-note='feedbackRate']", `实践反馈率 ${formatPercent(overview.feedbackRate)}`);
 }
 
-function renderDevices(events, feedback) {
+function renderDevices(events) {
   const container = document.querySelector("#device-summary");
   const pageViewNames = new Set(["home_view", "challenge_view"]);
   const totalEntries = countUnique(events, (event) => pageViewNames.has(event.event_name));
@@ -211,7 +227,6 @@ function renderDevices(events, feedback) {
 
   const columns = definitions.map((definition) => {
     const deviceEvents = events.filter((event) => definition.matches(event.device_type));
-    const deviceSessionKeys = new Set(deviceEvents.map(getSessionKey));
     const entries = countUnique(deviceEvents, (event) => pageViewNames.has(event.event_name));
     const practice = countUnique(deviceEvents, (event) => event.event_name === "challenge_view");
     const guide = countUnique(deviceEvents, (event) =>
@@ -219,9 +234,9 @@ function renderDevices(events, feedback) {
     const feedbackExposure = countUnique(deviceEvents, (event) =>
       event.event_name === "challenge_section_view" && event.placement === "feedback_section");
     const toolClicks = countUnique(deviceEvents, (event) => event.event_name === "tool_open");
-    const feedbackCount = new Set(
-      feedback.filter((record) => deviceSessionKeys.has(getSessionKey(record))).map(getSessionKey),
-    ).size;
+    const feedbackCount = countUnique(deviceEvents, (event) => (
+      event.event_name === "feedback_submit" && event.result === "success"
+    ));
     const article = createElement("article", "device-column");
     const header = createElement("header");
     const title = createElement("h3", "", definition.label);
@@ -248,19 +263,19 @@ function renderDevices(events, feedback) {
   replaceChildren(container, columns);
 }
 
-function getFunnel(events, feedback) {
+function getFunnel(events) {
   return [
     { label: "首页访问", value: countUnique(events, (event) => event.event_name === "home_view") },
     { label: "实践页到达", value: countUnique(events, (event) => event.event_name === "challenge_view") },
     { label: "推荐表曝光", value: countUnique(events, (event) => event.event_name === "challenge_section_view" && event.placement === "tool_guide") },
     { label: "工具点击", value: countUnique(events, (event) => event.event_name === "tool_open") },
     { label: "反馈区曝光", value: countUnique(events, (event) => event.event_name === "challenge_section_view" && event.placement === "feedback_section") },
-    { label: "完整反馈", value: new Set(feedback.map(getSessionKey)).size },
+    { label: "完整反馈", value: countUnique(events, (event) => event.event_name === "feedback_submit" && event.result === "success") },
   ];
 }
 
-function renderFunnel(events, feedback) {
-  const steps = getFunnel(events, feedback);
+function renderFunnel(events) {
+  const steps = getFunnel(events);
   const children = steps.map((step, index) => {
     const article = createElement("article", "funnel-step");
     article.append(
@@ -380,41 +395,35 @@ function renderEngagement(events) {
   setText("[data-engagement='returns']", formatCount(engagement.returns));
 }
 
-function renderFeedback(feedback) {
-  const container = document.querySelector("#feedback-records");
-  setText("#feedback-total", `${formatCount(feedback.length)} 条`);
-  if (!feedback.length) {
-    replaceChildren(container, [createElement("p", "empty-state", "后台已经接通，等待第一条真实反馈。")]);
-    return;
-  }
+function renderFeedbackSummary(events) {
+  const container = document.querySelector("#feedback-summary");
+  const feedbackEvents = getFeedbackEvents(events);
+  const feedbackSessions = countUnique(feedbackEvents);
+  setText("#feedback-total", `${formatCount(feedbackSessions)} 个会话`);
 
-  const records = feedback.slice(0, 30).map((record) => {
-    const article = createElement("article", "feedback-record");
-    const copy = createElement("div");
-    const meta = createElement("div", "feedback-meta");
-    const status = createElement("span", "feedback-status", feedbackLabels[record.status] || record.status || "已反馈");
-    status.dataset.status = record.status || "";
-    const time = createElement("time", "", formatDateTime(record.created_at));
-    time.dateTime = record.created_at || "";
-    meta.append(status, time);
-    copy.append(meta, createElement("p", "", record.reflection || "这条反馈只提交了图片。"));
-    article.append(copy);
+  const definitions = [
+    ["顺利完成", (event) => event.status === "smooth"],
+    ["卡过但找到", (event) => event.status === "recovered"],
+    ["还没找到", (event) => event.status === "unfinished"],
+    ["文字反馈", (event) => event.has_text === true || event.properties?.has_text === true],
+    ["图片反馈", (event) => event.has_image === true || event.properties?.has_image === true],
+    ["文字和图片", (event) => (
+      (event.has_text === true || event.properties?.has_text === true) &&
+      (event.has_image === true || event.properties?.has_image === true)
+    )],
+  ];
 
-    if (record.image_url) {
-      const link = createElement("a");
-      link.href = record.image_url;
-      link.target = "_blank";
-      link.rel = "noreferrer";
-      const image = createElement("img");
-      image.src = record.image_url;
-      image.alt = record.image_alt || "用户提交的反馈图片";
-      image.loading = "lazy";
-      link.append(image);
-      article.append(link);
-    }
+  const summaries = definitions.map(([label, predicate], index) => {
+    const article = createElement("article", "feedback-summary-item");
+    article.dataset.group = index < 3 ? "status" : "format";
+    article.append(
+      createElement("span", "", label),
+      createElement("strong", "", formatCount(countUnique(feedbackEvents, predicate))),
+      createElement("small", "", index < 3 ? "反馈状态会话" : "提交形式会话"),
+    );
     return article;
   });
-  replaceChildren(container, records);
+  replaceChildren(container, summaries);
 }
 
 function getEventDetail(event) {
@@ -581,14 +590,13 @@ function renderChart(events) {
 
 function renderDashboard() {
   const events = getEvents();
-  const feedback = getFeedback();
-  const overview = getOverview(events, feedback);
+  const overview = getOverview(events);
   renderOverview(overview);
-  renderDevices(events, feedback);
-  renderFunnel(events, feedback);
+  renderDevices(events);
+  renderFunnel(events);
   renderRankings(events);
   renderEngagement(events);
-  renderFeedback(feedback);
+  renderFeedbackSummary(events);
   renderRecentEvents(events);
   renderChart(events);
 }
@@ -620,18 +628,11 @@ async function refreshData({ manual = false } = {}) {
   if (!state.initialized || manual) setConnectionState("loading", "同步数据中");
 
   try {
-    const [events, feedback] = await Promise.all([
-      fetchRows("analytics_events", "occurred_at", state.latestEventAt),
-      fetchRows("challenge_feedback", "created_at", state.latestFeedbackAt),
-    ]);
+    const events = await fetchEvents(state.latestEventAt);
     events.forEach((event) => {
       if (event.event_id) state.events.set(event.event_id, event);
     });
-    feedback.forEach((record) => {
-      if (record.id) state.feedback.set(record.id, record);
-    });
     if (events.length) state.latestEventAt = events[events.length - 1].occurred_at;
-    if (feedback.length) state.latestFeedbackAt = feedback[feedback.length - 1].created_at;
 
     state.initialized = true;
     renderDashboard();
