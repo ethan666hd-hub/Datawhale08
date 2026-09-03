@@ -85,7 +85,10 @@ create policy daily_v8_analytics_events_insert_public
     and page_path = any (array[
       '/Datawhale08/',
       '/Datawhale08/index.html',
-      '/Datawhale08/practice.html'
+      '/Datawhale08/practice.html',
+      '/daily-v8/',
+      '/daily-v8/index.html',
+      '/daily-v8/practice.html'
     ]::text[])
     and device_type = any (array['desktop', 'tablet', 'mobile']::text[])
     and char_length(event_id) between 8 and 128

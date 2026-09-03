@@ -195,6 +195,22 @@ test("sends production events through the restricted insert endpoint", async () 
   );
 });
 
+test("sends official demo.datawhale.cn events from the daily-v8 path", async () => {
+  const harness = createHarness();
+  harness.window.location.hostname = "demo.datawhale.cn";
+  harness.window.location.pathname = "/daily-v8/practice.html";
+  harness.window.location.search = "";
+  const source = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  vm.runInNewContext(source, harness.context, { filename: "app.js" });
+
+  await Promise.resolve();
+  const requests = harness.getRequests();
+  assert.equal(requests.length, 1);
+  const payload = JSON.parse(requests[0][1].body);
+  assert.equal(payload.page_path, "/daily-v8/practice.html");
+  assert.equal(payload.properties.data_scope, "datawhale08-daily-v8");
+});
+
 test("classifies same-site navigation as an internal source", () => {
   const harness = createHarness();
   harness.window.location.hostname = "ethan666hd-hub.github.io";

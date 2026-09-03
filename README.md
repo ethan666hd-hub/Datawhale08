@@ -8,9 +8,10 @@ Datawhale 每日一试第六期：AI 工具选用推荐指南
 
 ## 线上地址
 
-- 网站：<https://ethan666hd-hub.github.io/Datawhale08/>
-- 实践页：<https://ethan666hd-hub.github.io/Datawhale08/practice.html>
-- 数据看板：<https://ethan666hd-hub.github.io/Datawhale08/platform-demo/>
+- 正式网站：<https://demo.datawhale.cn/daily-v8/>
+- 正式实践页：<https://demo.datawhale.cn/daily-v8/practice.html>
+- 正式数据看板：<https://demo.datawhale.cn/daily-v8/platform-demo/>
+- GitHub Pages 预览：<https://ethan666hd-hub.github.io/Datawhale08/>
 
 ## 数据闭环
 
@@ -29,5 +30,5 @@ Datawhale 每日一试第六期：AI 工具选用推荐指南
 ## 验收
 
 ```bash
-node --test tests/analytics.test.mjs
+node --test tests/*.mjs
 ```

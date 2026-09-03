@@ -122,8 +122,12 @@ function getAnalyticsEndpoint() {
 }
 
 function isProductionHostContext() {
-  return window.location.hostname === "ethan666hd-hub.github.io" &&
-    window.location.pathname.startsWith("/Datawhale08/");
+  const { hostname, pathname } = window.location;
+  return (
+    hostname === "ethan666hd-hub.github.io" && pathname.startsWith("/Datawhale08/")
+  ) || (
+    hostname === "demo.datawhale.cn" && pathname.startsWith("/daily-v8/")
+  );
 }
 
 function isProductionDataContext() {
