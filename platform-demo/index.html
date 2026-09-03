@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="theme-color" content="#ffe17c" />
+    <title>第六期数据看板 | Datawhale 每日一试</title>
+    <link rel="icon" href="../assets/datawhale.svg" />
+    <link rel="stylesheet" href="../dashboard.css?v=20260902-dashboard-v1" />
+    <script type="module" src="../dashboard.js?v=20260902-dashboard-v1"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#dashboard-main">跳到数据内容</a>
+
+    <header class="dashboard-header">
+      <div class="dashboard-shell dashboard-header-inner">
+        <a class="brand" href="../index.html" aria-label="返回第六期网站">
+          <span class="brand-mark"><img src="../assets/datawhale.svg" alt="" /></span>
+          <span class="brand-title">DATAWHALE<small>每日一试</small></span>
+        </a>
+        <div class="header-actions">
+          <span class="connection-state" id="connection-status" data-state="loading">
+            <i aria-hidden="true"></i><span>连接数据中</span>
+          </span>
+          <a class="site-link" href="../index.html">返回网站 <span aria-hidden="true">↗</span></a>
+        </div>
+      </div>
+    </header>
+
+    <main class="dashboard-shell" id="dashboard-main">
+      <section class="dashboard-intro" aria-labelledby="dashboard-title">
+        <div>
+          <p class="issue-label">VOL. 026</p>
+          <h1 id="dashboard-title">第六期数据看板</h1>
+          <p>AI工具选用推荐指南</p>
+        </div>
+        <div class="refresh-meta">
+          <span>每 10 秒读取一次真实数据</span>
+          <strong id="last-updated">等待首次同步</strong>
+          <button type="button" id="refresh-button" title="立即刷新数据" aria-label="立即刷新数据">
+            <span aria-hidden="true">↻</span><span>刷新</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="kpi-strip" aria-label="核心数据">
+        <article><span>独立访客</span><strong data-metric="visitors">0</strong><small>匿名用户</small></article>
+        <article><span>站点会话</span><strong data-metric="sessions">0</strong><small>首页与实践页去重</small></article>
+        <article class="kpi-accent"><span>实践页到达</span><strong data-metric="practiceSessions">0</strong><small data-metric-note="practiceRate">占站点会话 0%</small></article>
+        <article><span>工具点击</span><strong data-metric="toolClicks">0</strong><small data-metric-note="toolUsers">0 个点击会话</small></article>
+        <article class="kpi-green"><span>完整反馈</span><strong data-metric="feedbackCount">0</strong><small data-metric-note="feedbackRate">实践反馈率 0%</small></article>
+      </section>
+
+      <section class="analytics-grid analytics-grid-primary">
+        <article class="data-panel device-panel">
+          <header class="panel-heading">
+            <div><span>双端统计</span><h2>PC 与移动端</h2></div>
+            <p>移动端包含手机和平板，全部按独立会话统计。</p>
+          </header>
+          <div class="device-summary" id="device-summary"></div>
+        </article>
+
+        <article class="data-panel trend-panel">
+          <header class="panel-heading panel-heading-inline">
+            <div><span>实时趋势</span><h2>关键行为时分统计</h2></div>
+            <div class="segmented-control" aria-label="趋势时间粒度">
+              <button type="button" data-time-mode="minute" aria-pressed="true">分钟</button>
+              <button type="button" data-time-mode="hour" aria-pressed="false">小时</button>
+            </div>
+          </header>
+          <div class="chart-legend" aria-label="图例">
+            <span><i class="legend-entry"></i>页面访问</span>
+            <span><i class="legend-exposure"></i>有效曝光</span>
+            <span><i class="legend-tool"></i>工具点击</span>
+          </div>
+          <div class="chart-wrap">
+            <svg id="trend-chart" viewBox="0 0 920 300" role="img" aria-label="关键行为趋势图"></svg>
+            <p class="chart-empty" id="chart-empty" hidden>当前时间窗口还没有事件。</p>
+          </div>
+        </article>
+      </section>
+
+      <section class="data-panel funnel-panel">
+        <header class="panel-heading panel-heading-inline">
+          <div><span>核心路径</span><h2>从访问到反馈</h2></div>
+          <p>曝光要求区域可见 50% 且持续 800ms，同一会话只记一次。</p>
+        </header>
+        <div class="funnel-flow" id="funnel-flow"></div>
+      </section>
+
+      <section class="analytics-grid analytics-grid-secondary">
+        <article class="data-panel">
+          <header class="panel-heading"><div><span>工具选择</span><h2>工具点击排行</h2></div></header>
+          <div class="rank-list" id="tool-ranking"></div>
+        </article>
+        <article class="data-panel">
+          <header class="panel-heading"><div><span>内容到达</span><h2>模块有效曝光</h2></div></header>
+          <div class="rank-list" id="exposure-ranking"></div>
+        </article>
+      </section>
+
+      <section class="analytics-grid analytics-grid-secondary">
+        <article class="data-panel engagement-panel">
+          <header class="panel-heading"><div><span>阅读质量</span><h2>停留与阅读深度</h2></div></header>
+          <dl class="metric-list">
+            <div><dt>平均前台停留</dt><dd data-engagement="duration">0秒</dd></div>
+            <div><dt>平均最大滚动</dt><dd data-engagement="scroll">0%</dd></div>
+            <div><dt>收藏会话</dt><dd data-engagement="favorites">0</dd></div>
+            <div><dt>回访会话</dt><dd data-engagement="returns">0</dd></div>
+          </dl>
+        </article>
+        <article class="data-panel">
+          <header class="panel-heading"><div><span>访问来源</span><h2>入口来源排行</h2></div></header>
+          <div class="rank-list" id="source-ranking"></div>
+        </article>
+      </section>
+
+      <section class="data-panel feedback-panel">
+        <header class="panel-heading panel-heading-inline">
+          <div><span>完整反馈</span><h2>评论与图片</h2></div>
+          <strong class="panel-count" id="feedback-total">0 条</strong>
+        </header>
+        <div class="feedback-records" id="feedback-records"></div>
+      </section>
+
+      <section class="data-panel event-panel">
+        <header class="panel-heading panel-heading-inline">
+          <div><span>最近动态</span><h2>实时事件</h2></div>
+          <p>仅展示事件类型和环境信息，不展示匿名用户标识。</p>
+        </header>
+        <div class="event-table-wrap">
+          <table>
+            <thead><tr><th>时间</th><th>事件</th><th>页面</th><th>设备</th><th>来源</th><th>详情</th></tr></thead>
+            <tbody id="recent-events"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <div class="dashboard-toast" id="dashboard-toast" role="status" aria-live="polite" hidden></div>
+  </body>
+</html>

@@ -12,7 +12,10 @@ const MAX_LOCAL_EVENTS = 500;
 const EXPOSURE_THRESHOLD = 0.5;
 const EXPOSURE_DWELL_MS = 800;
 const ENGAGEMENT_CHECKPOINT_MS = 15000;
-const SUPABASE_ANALYTICS_URL = "https://fjsdilkacsaarxnqrdmm.supabase.co/rest/v1/daily_v8_analytics_events";
+const SUPABASE_PROJECT_URL = "https://fjsdilkacsaarxnqrdmm.supabase.co";
+const SUPABASE_ANALYTICS_URL = `${SUPABASE_PROJECT_URL}/rest/v1/analytics_events`;
+const SUPABASE_FEEDBACK_URL = `${SUPABASE_PROJECT_URL}/rest/v1/challenge_feedback`;
+const SUPABASE_FEEDBACK_BUCKET = "challenge-feedback";
 const SUPABASE_ANON_KEY = "sb_publishable_LKFWLPhFegq-KScuSQzfXw_2rYSuTfn";
 
 function readStoredList(key) {
@@ -105,9 +108,13 @@ function getAnalyticsEndpoint() {
   return window.DATAWHALE_ANALYTICS_ENDPOINT || metaEndpoint || SUPABASE_ANALYTICS_URL;
 }
 
-function isProductionDataContext() {
+function isProductionHostContext() {
   return window.location.hostname === "ethan666hd-hub.github.io" &&
-    window.location.pathname.startsWith("/Datawhale08/") &&
+    window.location.pathname.startsWith("/Datawhale08/");
+}
+
+function isProductionDataContext() {
+  return isProductionHostContext() &&
     !analyticsContext.utm_source.startsWith("codex_");
 }
 
@@ -128,6 +135,10 @@ function toAnalyticsRecord(event) {
     "placement",
     "result",
     "status",
+    "has_text",
+    "has_image",
+    "submit_mode",
+    "text_length_bucket",
   ]);
   const record = Object.fromEntries(
     Object.entries(event).filter(([key]) => columnNames.has(key)),
@@ -456,10 +467,14 @@ const feedbackSubmit = feedbackForm?.querySelector("button[type='submit']");
 
 let feedbackStatus = "";
 let feedbackImageFile = null;
+let feedbackSubmitting = false;
+const feedbackSubmitIdleLabel = feedbackSubmit?.textContent || "发送反馈";
 
 function updateFeedbackSubmit() {
   if (!feedbackSubmit) return;
-  feedbackSubmit.disabled = !feedbackStatus || (!feedbackMessage?.value.trim() && !feedbackImageFile);
+  feedbackSubmit.disabled = feedbackSubmitting ||
+    !feedbackStatus ||
+    (!feedbackMessage?.value.trim() && !feedbackImageFile);
 }
 
 feedbackButtons.forEach((button) => {
@@ -520,32 +535,173 @@ removeImageButton?.addEventListener("click", () => {
   updateFeedbackSubmit();
 });
 
-feedbackForm?.addEventListener("submit", (event) => {
-  event.preventDefault();
-  updateFeedbackSubmit();
-  if (feedbackSubmit?.disabled) return;
+function getFeedbackSubmitMode(message, imageFile) {
+  if (message && imageFile) return "text_and_image";
+  if (imageFile) return "image_only";
+  return "text_only";
+}
 
-  const feedbackRecords = readStoredList(FEEDBACK_KEY);
-  feedbackRecords.push({
-    status: feedbackStatus,
-    message: feedbackMessage?.value.trim() || "",
-    has_image: Boolean(feedbackImageFile),
-    image_name: feedbackImageFile?.name || "",
-    timestamp: new Date().toISOString(),
-  });
-  writeStoredList(FEEDBACK_KEY, feedbackRecords.slice(-50));
-  track("feedback_submit", {
-    placement: "feedback_detail_form",
-    status: feedbackStatus,
-    has_text: Boolean(feedbackMessage?.value.trim()),
-    has_image: Boolean(feedbackImageFile),
+function getTextLengthBucket(message) {
+  if (!message) return "none";
+  if (message.length <= 50) return "1_to_50";
+  if (message.length <= 200) return "51_to_200";
+  return "201_to_500";
+}
+
+function getSupabaseHeaders(extraHeaders = {}) {
+  return {
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    ...extraHeaders,
+  };
+}
+
+async function uploadFeedbackImage(file) {
+  if (!file) return { imagePath: "", imageUrl: "" };
+
+  const extensionByType = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/webp": "webp",
+  };
+  const extension = extensionByType[file.type] || "jpg";
+  const imagePath = `${CHALLENGE_ID}/${Date.now()}-${createId()}.${extension}`;
+  const encodedPath = imagePath.split("/").map(encodeURIComponent).join("/");
+  const response = await fetch(
+    `${SUPABASE_PROJECT_URL}/storage/v1/object/${SUPABASE_FEEDBACK_BUCKET}/${encodedPath}`,
+    {
+      method: "POST",
+      headers: getSupabaseHeaders({
+        "Content-Type": file.type || "application/octet-stream",
+        "x-upsert": "false",
+      }),
+      body: file,
+    },
+  );
+
+  if (!response.ok) throw new Error(`feedback_image_upload_${response.status}`);
+
+  return {
+    imagePath,
+    imageUrl: `${SUPABASE_PROJECT_URL}/storage/v1/object/public/${SUPABASE_FEEDBACK_BUCKET}/${encodedPath}`,
+  };
+}
+
+async function insertFeedbackRecord(record) {
+  const response = await fetch(SUPABASE_FEEDBACK_URL, {
+    method: "POST",
+    headers: getSupabaseHeaders({
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    }),
+    body: JSON.stringify(record),
   });
 
+  if (!response.ok) throw new Error(`feedback_insert_${response.status}`);
+  const rows = await response.json();
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+
+function resetFeedbackForm() {
   if (feedbackMessage) feedbackMessage.value = "";
   feedbackImageFile = null;
   if (feedbackImage) feedbackImage.value = "";
   if (feedbackPreviewImage) feedbackPreviewImage.removeAttribute("src");
   if (feedbackPreview) feedbackPreview.hidden = true;
+}
+
+feedbackForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
   updateFeedbackSubmit();
-  showToast("反馈已记录，谢谢你的分享");
+  if (feedbackSubmit?.disabled) return;
+
+  const message = feedbackMessage?.value.trim() || "";
+  const imageFile = feedbackImageFile;
+  const submitMode = getFeedbackSubmitMode(message, imageFile);
+  const textLengthBucket = getTextLengthBucket(message);
+  const feedbackId = createId();
+  const feedbackRecords = readStoredList(FEEDBACK_KEY);
+  const localRecord = {
+    feedback_id: feedbackId,
+    status: feedbackStatus,
+    message,
+    has_image: Boolean(imageFile),
+    image_name: imageFile?.name || "",
+    timestamp: new Date().toISOString(),
+  };
+  feedbackRecords.push(localRecord);
+  writeStoredList(FEEDBACK_KEY, feedbackRecords.slice(-50));
+
+  track("feedback_submit_attempt", {
+    placement: "feedback_detail_form",
+    status: feedbackStatus,
+    has_text: Boolean(message),
+    has_image: Boolean(imageFile),
+    submit_mode: submitMode,
+    text_length_bucket: textLengthBucket,
+  });
+
+  if (!isProductionHostContext()) {
+    resetFeedbackForm();
+    updateFeedbackSubmit();
+    showToast("反馈已保存在当前浏览器，线上访问时会发送到后台");
+    return;
+  }
+
+  feedbackSubmitting = true;
+  if (feedbackSubmit) feedbackSubmit.textContent = "发送中...";
+  updateFeedbackSubmit();
+
+  try {
+    const { imagePath, imageUrl } = await uploadFeedbackImage(imageFile);
+    const savedRecord = await insertFeedbackRecord({
+      challenge_id: CHALLENGE_ID,
+      challenge_title: "AI工具选用推荐指南",
+      status: feedbackStatus,
+      reflection: message,
+      image_url: imageUrl,
+      image_path: imagePath,
+      image_alt: imageFile ? "用户提交的工具使用反馈图片" : "",
+      image_name: imageFile?.name || "",
+      anonymous_id: analyticsContext.anonymous_id,
+      session_id: analyticsContext.session_id,
+      utm_source: analyticsContext.utm_source,
+      utm_medium: analyticsContext.utm_medium,
+      utm_campaign: analyticsContext.utm_campaign,
+      source_page: analyticsContext.page_path,
+    });
+
+    const updatedRecords = readStoredList(FEEDBACK_KEY).map((record) => (
+      record.feedback_id === feedbackId
+        ? { ...record, remote_id: savedRecord?.id || "", synced_at: new Date().toISOString() }
+        : record
+    ));
+    writeStoredList(FEEDBACK_KEY, updatedRecords);
+    track("feedback_submit", {
+      placement: "feedback_detail_form",
+      status: feedbackStatus,
+      result: "success",
+      has_text: Boolean(message),
+      has_image: Boolean(imageFile),
+      submit_mode: submitMode,
+      text_length_bucket: textLengthBucket,
+    });
+    resetFeedbackForm();
+    showToast("反馈已发送，谢谢你的分享");
+  } catch {
+    track("feedback_submit_failed", {
+      placement: "feedback_detail_form",
+      status: feedbackStatus,
+      result: "failed",
+      has_text: Boolean(message),
+      has_image: Boolean(imageFile),
+      submit_mode: submitMode,
+      text_length_bucket: textLengthBucket,
+    });
+    showToast("暂时没有发送成功，请稍后再试");
+  } finally {
+    feedbackSubmitting = false;
+    if (feedbackSubmit) feedbackSubmit.textContent = feedbackSubmitIdleLabel;
+    updateFeedbackSubmit();
+  }
 });

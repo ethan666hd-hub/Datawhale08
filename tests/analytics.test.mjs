@@ -177,7 +177,7 @@ test("sends production events through the restricted insert endpoint", async () 
   await Promise.resolve();
   const requests = harness.getRequests();
   assert.equal(requests.length, 1);
-  assert.match(requests[0][0], /\/rest\/v1\/daily_v8_analytics_events$/);
+  assert.match(requests[0][0], /\/rest\/v1\/analytics_events$/);
   assert.equal(requests[0][1].method, "POST");
   assert.ok(requests[0][1].headers.apikey);
 
